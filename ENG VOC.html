@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>我的單字卡 App</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#84C1FF">
+    
+    <style>
+        :root {
+            --primary-light: #84C1FF;
+            --primary: #5CABFF;
+            --bg: #F0F2F5;
+            --card-bg: #FFFFFF;
+            --text-main: #333333;
+            --text-sub: #666666;
+            --border: #E0E0E0;
+            --input-bg: #FFFFFF;
+            --success: #2ECC71;
+            --error: #E74C3C;
+            --nav-bg: #FFFFFF;
+            --tag-bg: #F0F0F0;
+            --shadow: 0 4px 6px rgba(0,0,0,0.05);
+            --transition-speed: 0.3s;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #121212;
+                --card-bg: #1E1E1E;
+                --text-main: #E0E0E0;
+                --text-sub: #A0A0A0;
+                --border: #333333;
+                --input-bg: #2C2C2C;
+                --nav-bg: #1E1E1E;
+                --tag-bg: #333333;
+                --shadow: 0 4px 6px rgba(0,0,0,0.3);
+            }
+        }
+
+        * { box-sizing: border-box; transition: background-color var(--transition-speed), color var(--transition-speed); }
+        body { font-family: -apple-system, system-ui, sans-serif; background-color: var(--bg); color: var(--text-main); margin: 0; padding-bottom: 75px; }
+        .container { max-width: 650px; margin: 0 auto; padding: 20px; }
+        h2 { text-align: center; margin-bottom: 20px; }
+        .page { display: none; opacity: 0; transform: translateY(10px); transition: 0.4s; }
+        .page.active { display: block; opacity: 1; transform: translateY(0); }
+
+        /* 元件樣式 */
+        input, select, textarea { width: 100%; padding: 14px; margin-bottom: 15px; border: 1px solid var(--border); border-radius: 10px; background: var(--input-bg); color: var(--text-main); font-size: 16px; }
+        button { border-radius: 10px; cursor: pointer; border: none; font-weight: 600; transition: 0.2s; }
+        .main-btn { width: 100%; padding: 16px; background: var(--primary-light); color: white; margin-top: 10px; }
+        .sec-btn { padding: 10px 20px; background: var(--tag-bg); color: var(--text-main); border: 1px solid var(--border); }
+        .export-btn { width: 100%; padding: 12px; background: #6ab0f3; color: white; margin-bottom: 15px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+        /* 卡片與清單 */
+        .word-list-card { background: var(--card-bg); border-radius: 12px; box-shadow: var(--shadow); margin-bottom: 12px; border-left: 5px solid transparent; }
+        .card-content { padding: 18px; }
+        .card-word { font-size: 19px; font-weight: 700; margin-bottom: 5px; }
+        .hidden-text { color: transparent; background: var(--border); border-radius: 4px; cursor: pointer; }
+
+        /* 匯出彈窗 (Modal) */
+        .modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); z-index: 1000; align-items: center; justify-content: center; }
+        .modal-content { background: var(--card-bg); width: 90%; max-width: 500px; padding: 25px; border-radius: 15px; position: relative; }
+        #export-text-area { width: 100%; height: 250px; font-family: monospace; font-size: 14px; margin-top: 10px; }
+
+        /* 導覽列 */
+        nav { position: fixed; bottom: 0; width: 100%; background: var(--nav-bg); display: flex; border-top: 1px solid var(--border); padding-bottom: env(safe-area-inset-bottom); }
+        nav button { flex: 1; padding: 18px; background: none; color: var(--text-sub); }
+        nav button.active { color: var(--primary-light); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <section id="add-page" class="page active">
+        <h2>新增單字卡</h2>
+        <div style="display:flex; gap:10px; margin-bottom:15px;">
+            <select id="book-select-add" style="margin:0;"></select>
+            <button class="sec-btn" onclick="addNewBook()">+ 新單字本</button>
+        </div>
+        <div style="background:var(--card-bg); padding:20px; border-radius:12px; box-shadow:var(--shadow);">
+            <input type="text" id="single-word" placeholder="單字 (例如: Apple)">
+            <input type="text" id="single-trans" placeholder="意思 (例如: 蘋果)">
+            <button class="main-btn" onclick="saveSingle()">儲存單字</button>
+            <hr style="border:0; border-top:1px solid var(--border); margin:20px 0;">
+            <textarea id="bulk-input" rows="4" placeholder="大量輸入格式：單字/意思 (每行一筆)"></textarea>
+            <button class="main-btn" onclick="saveBulk()">大量匯入</button>
+        </div>
+    </section>
+
+    <section id="list-page" class="page">
+        <h2>單字清單</h2>
+        <select id="book-select-list" onchange="renderList()"></select>
+        <button class="export-btn" onclick="openExportModal()">📥 匯出全部單字</button>
+        <div id="word-list-container"></div>
+    </section>
+
+    <section id="quiz-page" class="page">
+        <h2>自我測驗</h2>
+        <div id="quiz-setup-card" style="background:var(--card-bg); padding:25px; border-radius:12px; text-align:center;">
+            <select id="book-select-quiz"></select>
+            <select id="quiz-mode">
+                <option value="en-cn">看英文選中文</option>
+                <option value="cn-en">看中文選英文</option>
+            </select>
+            <button class="main-btn" onclick="startQuiz()">開始測驗</button>
+        </div>
+        <div id="quiz-area" style="display:none; background:var(--card-bg); padding:20px; border-radius:12px;">
+            <h3 id="quiz-question" style="text-align:center;"></h3>
+            <div id="quiz-options"></div>
+            <div id="quiz-feedback" style="text-align:center; margin:15px; font-weight:700;"></div>
+            <button class="main-btn" id="next-btn" style="display:none; background:#2ecc71;" onclick="generateQuestion()">下一題</button>
+            <button class="sec-btn" style="width:100%; margin-top:10px;" onclick="toggleExplanation()">詳解</button>
+            <div id="quiz-explanation" style="display:none; margin-top:10px; padding:10px; background:var(--tag-bg); border-radius:8px;"></div>
+        </div>
+    </section>
+</div>
+
+<div id="export-modal" class="modal">
+    <div class="modal-content">
+        <h3 style="margin-top:0;">匯出單字資料</h3>
+        <textarea id="export-text-area" readonly></textarea>
+        <div style="display:flex; gap:10px; margin-top:15px;">
+            <button class="main-btn" onclick="copyExportText()" style="margin:0;">一鍵複製</button>
+            <button class="sec-btn" onclick="closeExportModal()" style="margin:0; flex:1;">關閉</button>
+        </div>
+    </div>
+</div>
+
+<nav>
+    <button onclick="showPage('add-page')" id="nav-add" class="active">新增</button>
+    <button onclick="showPage('list-page')" id="nav-list">清單</button>
+    <button onclick="showPage('quiz-page')" id="nav-quiz">測驗</button>
+</nav>
+
+<script>
+    let data = JSON.parse(localStorage.getItem('vocabApp')) || { "預設本": [] };
+    let currentQuizData = [];
+    let currentAnswer = {};
+    let currentOptions = [];
+
+    // 初始化與分頁
+    function updateBookSelects() {
+        const selects = ['book-select-add', 'book-select-list', 'book-select-quiz'];
+        const options = Object.keys(data).map(name => `<option value="${name}">${name}</option>`).join('');
+        selects.forEach(id => document.getElementById(id).innerHTML = (id==='book-select-list'?'<option value="all">全部單字</option>':'')+options);
+    }
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+        document.getElementById(pageId).classList.add('active');
+        document.querySelectorAll('nav button').forEach(b => b.classList.remove('active'));
+        document.getElementById('nav-' + pageId.split('-')[0]).classList.add('active');
+        if(pageId === 'list-page') renderList();
+    }
+    function saveData() { localStorage.setItem('vocabApp', JSON.stringify(data)); }
+
+    // 新增單字
+    function addNewBook() {
+        const name = prompt("名稱：");
+        if(name && !data[name]) { data[name] = []; saveData(); updateBookSelects(); }
+    }
+    function saveSingle() {
+        const b = document.getElementById('book-select-add').value, w = document.getElementById('single-word').value, t = document.getElementById('single-trans').value;
+        if(w && t) { data[b].push({word:w, trans:t}); saveData(); alert('已儲存'); }
+    }
+    function saveBulk() {
+        const b = document.getElementById('book-select-add').value, val = document.getElementById('bulk-input').value;
+        val.split('\n').forEach(l => { const s = l.split('/'); if(s.length==2) data[b].push({word:s[0].trim(), trans:s[1].trim()}); });
+        saveData(); alert('匯入完成');
+    }
+
+    // 清單與匯出
+    function renderList() {
+        const b = document.getElementById('book-select-list').value, cont = document.getElementById('word-list-container');
+        cont.innerHTML = '';
+        let list = (b==='all') ? Object.values(data).flat() : data[b];
+        list.forEach(i => {
+            const d = document.createElement('div'); d.className = 'word-list-card';
+            d.innerHTML = `<div class="card-content"><div class="card-word">${i.word}</div><div class="card-trans">${i.trans}</div></div>`;
+            cont.appendChild(d);
+        });
+    }
+
+    // 匯出功能
+    function openExportModal() {
+        const b = document.getElementById('book-select-list').value;
+        let list = (b==='all') ? Object.values(data).flat() : data[b];
+        const exportStr = list.map(i => `${i.word}/${i.trans}`).join('\n');
+        document.getElementById('export-text-area').value = exportStr;
+        document.getElementById('export-modal').style.display = 'flex';
+    }
+    function closeExportModal() { document.getElementById('export-modal').style.display = 'none'; }
+    function copyExportText() {
+        const ta = document.getElementById('export-text-area');
+        ta.select(); document.execCommand('copy');
+        alert('已複製到剪貼簿！');
+    }
+
+    // 測驗邏輯 (簡化版)
+    function startQuiz() {
+        currentQuizData = data[document.getElementById('book-select-quiz').value];
+        if(currentQuizData.length < 4) return alert('需4個單字');
+        document.getElementById('quiz-setup-card').style.display='none';
+        document.getElementById('quiz-area').style.display='block';
+        generateQuestion();
+    }
+    function generateQuestion() {
+        const mode = document.getElementById('quiz-mode').value;
+        document.getElementById('quiz-feedback').innerText = '';
+        document.getElementById('next-btn').style.display = 'none';
+        document.getElementById('quiz-explanation').style.display = 'none';
+        currentAnswer = currentQuizData[Math.floor(Math.random()*currentQuizData.length)];
+        let opts = [currentAnswer];
+        while(opts.length < 4) {
+            const r = currentQuizData[Math.floor(Math.random()*currentQuizData.length)];
+            if(!opts.includes(r)) opts.push(r);
+        }
+        opts.sort(()=>Math.random()-0.5); currentOptions = opts;
+        document.getElementById('quiz-question').innerText = mode==='en-cn'?currentAnswer.word:currentAnswer.trans;
+        const optCont = document.getElementById('quiz-options'); optCont.innerHTML = '';
+        opts.forEach(o => {
+            const btn = document.createElement('button'); btn.className = 'sec-btn'; btn.style.width='100%'; btn.style.margin='5px 0';
+            btn.innerText = mode==='en-cn'?o.trans:o.word;
+            btn.onclick = () => {
+                if(o === currentAnswer) { document.getElementById('quiz-feedback').innerText='正確'; document.getElementById('next-btn').style.display='block'; }
+                else document.getElementById('quiz-feedback').innerText='錯誤';
+            };
+            optCont.appendChild(btn);
+        });
+    }
+    function toggleExplanation() {
+        const e = document.getElementById('quiz-explanation');
+        e.style.display = e.style.display==='none'?'block':'none';
+        e.innerHTML = currentOptions.map(o => `<div>${o.word}: ${o.trans}</div>`).join('');
+    }
+
+    // PWA Service Worker 註冊
+    if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+            navigator.serviceWorker.register('./sw.js').catch(err => console.log(err));
+        });
+    }
+
+    updateBookSelects();
+</script>
+</body>
+</html>
